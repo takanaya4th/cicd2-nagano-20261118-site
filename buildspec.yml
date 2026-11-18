@@ -1,0 +1,28 @@
+version: 0.2
+
+env:
+  variables:
+    ECR_REPOSITORY_NAME: cicd2-nagano-20261118-app
+    # タスク定義のコンテナ名と完全に同じにする
+    CONTAINER_NAME: cicd2-nagano-20261118-web
+
+phases:
+  pre_build:
+    commands:
+      - AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+      - REGISTRY=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com
+      - REPOSITORY_URI=${REGISTRY}/${ECR_REPOSITORY_NAME}
+      - IMAGE_TAG=$(echo "$CODEBUILD_RESOLVED_SOURCE_VERSION" | cut -c 1-7)
+      - aws ecr get-login-password | docker login --username AWS --password-stdin "$REGISTRY"
+  build:
+    commands:
+      - docker build -t "$REPOSITORY_URI:$IMAGE_TAG" .
+  post_build:
+    commands:
+      - docker push "$REPOSITORY_URI:$IMAGE_TAG"
+      - printf '[{"name":"%s","imageUri":"%s"}]' "$CONTAINER_NAME" "$REPOSITORY_URI:$IMAGE_TAG" > imagedefinitions.json
+      - cat imagedefinitions.json
+
+artifacts:
+  files:
+    - imagedefinitions.json
